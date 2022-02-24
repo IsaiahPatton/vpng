@@ -1,6 +1,21 @@
 module vpng
 
 import os
+import compress.zlib
+
+pub fn (png PngFile) get_bytes() []byte {
+    mut file_bytes := []byte{}
+	signature(mut file_bytes)
+	write_chunks(mut file_bytes, png)
+    return file_bytes
+}
+
+pub fn (png PngFile) get_bytes_() []byte {
+    mut file_bytes := []byte{}
+	//signature(mut file_bytes)
+	write_chunks_(mut file_bytes, png)
+    return file_bytes
+}
 
 fn write_(png PngFile, filename string) {
 	mut file_bytes := []byte{}
@@ -65,19 +80,16 @@ fn idat_chunk(mut file_bytes []byte, mut cs CRC, png PngFile) {
 	}
 
 	out_len := idat_bytes.len + idat_bytes.len * 2
-	out := unsafe {malloc(out_len)}
-	defstream := C.z_stream_s{
-		zalloc: 0
-		zfree: 0
-		opaque: 0
-		avail_in: u32(idat_bytes.len)
-		next_in: idat_bytes.bytestr().str
-		avail_out: u32(out_len)
-		next_out: out
-	}
-	C.deflateInit(&defstream, 9)
-	C.deflate(&defstream, 4)
-	C.deflateEnd(&defstream)
+    
+    mut out_ := zlib.compress(idat_bytes) or { panic(err) } 
+    mut out := []byte{len: out_len+1}
+    
+    mut val := 0
+    for b in out_ {
+        out[val] = b
+        val += 1
+    }
+
 	mut out_bytes := [byte(`I`), `D`, `A`, `T`]
 	mut max := 0
 	for i := out_len; i > 0; i-- {
@@ -120,4 +132,12 @@ fn write_chunks(mut file_bytes []byte, png PngFile) {
 	plte_chunk(mut file_bytes, mut cs, png)
 	idat_chunk(mut file_bytes, mut cs, png)
 	iend_chunk(mut file_bytes, mut cs)
+}
+
+fn write_chunks_(mut file_bytes []byte, png PngFile) {
+	mut cs := CRC{}
+	//ihdr_chunk(mut file_bytes, mut cs, png)
+	//plte_chunk(mut file_bytes, mut cs, png)
+	idat_chunk(mut file_bytes, mut cs, png)
+	//iend_chunk(mut file_bytes, mut cs)
 }

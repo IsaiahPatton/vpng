@@ -1,18 +1,18 @@
 module vpng
 
 import os
+import compress.zlib
 
 fn parse_(filename string) ?PngFile {
-	file := os.read_file(filename) or {
-		return none
-	}
-	mut file_bytes := []byte{len: file.len}
-	for i, b in file {
-		file_bytes[i] = byte(b)
-	}
+    mut file_bytes := os.read_bytes(filename) or {
+        panic(err)
+        return none
+    }
+
 	read_signature(file_bytes[ .. 8]) or {
 		return none
 	}
+
 	mut png := read_chunks(file_bytes[8 .. ])
 	png.channels = match png.ihdr.color_type {
 		3 { 1 } // Indexed
@@ -41,6 +41,7 @@ fn parse_(filename string) ?PngFile {
 		}
 	}
 	return PngFile{
+        inter: png
 		width: png.ihdr.width
 		height: png.ihdr.height
 		pixels: png.pixels
@@ -140,6 +141,7 @@ fn read_bytes(mut png InternalPngFile) []Pixel {
 	}
 	mut res := []Pixel{}
 	for index := 0; index < png.unfiltered_bytes.len; index += png.channels {
+
 		match png.ihdr.color_type {
 			3 { // Indexed
 				res << Indexed{
@@ -170,6 +172,7 @@ fn read_bytes(mut png InternalPngFile) []Pixel {
 	}
 	return res
 }
+
 
 fn read_chunks(file []byte) InternalPngFile {
 	mut index := 0
@@ -206,25 +209,6 @@ fn read_chunks(file []byte) InternalPngFile {
 }
 
 fn decompress_idat(png InternalPngFile) []byte {
-	out_len := (png.ihdr.width * png.ihdr.height) * png.channels + png.ihdr.height
-	out := unsafe {malloc(out_len)}
-	infstream := C.z_stream_s{
-		zalloc: 0
-		zfree: 0
-		opaque: 0
-		avail_in: u32(png.idat_chunks.len)
-		next_in: png.idat_chunks.bytestr().str
-		avail_out: u32(out_len)
-		next_out: out
-	}
-	C.inflateInit(&infstream)
-	C.inflate(&infstream, 0)
-	C.inflateEnd(&infstream)
-	mut out_bytes := []byte{len: out_len}
-	for i in 0 .. (out_len) {
-		unsafe {
-			out_bytes[i] = byte(out[i])
-		}
-	}
-	return out_bytes
+    ldata := zlib.decompress(png.idat_chunks) or { panic(err) }
+    return ldata
 }
